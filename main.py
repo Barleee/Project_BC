@@ -129,7 +129,8 @@ def create_tables():
             model TEXT NOT NULL,
             registration_number TEXT NOT NULL UNIQUE,
             latitude REAL NOT NULL,
-            longitude REAL NOT NULL)
+            longitude REAL NOT NULL
+        )
     """)
 
 #tabela dla taksówkarza imie,nazwisko,numer telefonu, współzędne, przypisanie do taksówki? coś co określi czym jeździ.
@@ -145,8 +146,125 @@ def create_tables():
             FOREIGN KEY (taxi_id) REFERENCES taxis(id)
         )
     """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            phone TEXT,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            taxi_id INTEGER,
+            ride_date TEXT,
+            FOREIGN KEY (taxi_id) REFERENCES taxis(id)
+        )
+    """)
     conn.commit()
     conn.close()
+#dodawanie użytkowników do SQL
+def add_client_to_db(first_name, last_name, phone, latitude, longitude, taxi_id, ride_date):
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO clients (first_name, last_name, phone, latitude, longitude, taxi_id, ride_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (first_name, last_name, phone, latitude, longitude, taxi_id, ride_date))
+
+    conn.commit()
+    conn.close()
+#pobieranie danych z bazy SQL  na podstawie parametrów
+
+def get_all_clients():
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT 
+            clients.id,
+            clients.first_name,
+            clients.last_name,
+            clients.phone,
+            clients.latitude,
+            clients.longitude,
+            clients.ride_date,
+            taxis.brand,
+            taxis.model,
+            taxis.registration_number
+        FROM clients
+        LEFT JOIN taxis ON clients.taxi_id = taxis.id
+    """)
+#pobieranie danych o klientach z danego dnia
+    def get_clients_by_taxi_and_date(taxi_id, ride_date):
+        conn = connect_db()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+                       SELECT clients.id,
+                              clients.first_name,
+                              clients.last_name,
+                              clients.phone,
+                              clients.latitude,
+                              clients.longitude,
+                              clients.ride_date
+                       FROM clients
+                       WHERE clients.taxi_id = ?
+                         AND clients.ride_date = ?
+                       """, (taxi_id, ride_date))
+
+        clients = cursor.fetchall()
+        conn.close()
+
+        return clients
+    clients = cursor.fetchall()
+    conn.close()
+
+    return clients
+#wyświetlanie klientów
+def show_clients():
+    listbox_lista_obiektow.delete(0, END)
+
+    clients = get_all_clients()
+
+    for client in clients:
+        client_id = client[0]
+        first_name = client[1]
+        last_name = client[2]
+        ride_date = client[6]
+        taxi_brand = client[7]
+        taxi_model = client[8]
+        registration_number = client[9]
+
+        listbox_lista_obiektow.insert(
+            END,
+            f"{client_id}. {first_name} {last_name} | {ride_date} | {taxi_brand} {taxi_model} {registration_number}")
+
+#wyświetlanie klientów na mapie z markerami
+def show_clients_on_map():
+    global client_markers
+
+    for marker in client_markers:
+        marker.delete()
+
+    client_markers = []
+
+    clients = get_all_clients()
+
+    for client in clients:
+        first_name = client[1]
+        last_name = client[2]
+        latitude = client[4]
+        longitude = client[5]
+
+        marker = map_widget.set_marker(
+            latitude,
+            longitude,
+            text=f"{first_name} {last_name}"
+        )
+
+        client_markers.append(marker)
+
 
 
 root=Tk()
@@ -172,14 +290,6 @@ ramka_mapa.grid(row=2, column=0, columnspan=2)
 
 label_lista_obiektow = Label(ramka_lista_obiektow, text="Lista użytkowników: ")
 listbox_lista_obiektow = Listbox(ramka_lista_obiektow)
-
-def wczytaj_uzytkownikow():
-    listbox_lista_obiektow.delete(0, END)
-
-    for uzytkownik in model_user:
-        listbox_lista_obiektow.insert(END, uzytkownik["Name"])
-
-
 # tworzenei guzików, buttonów pod tabelą ( rodzic ramka_lista_obiektow, tam będzie wyskakiwać
 
 button_pokaz_szczegoly_obiektu = Button(ramka_lista_obiektow, text="Pokaz szczegoly ", command= show_user_details )
@@ -200,8 +310,6 @@ label_imie = Label(ramka_formularz, text="Imię")
 label_imie.grid(row=1, column=0, sticky=W)
 label_nazwisko =Label(ramka_formularz, text="Nazwisko")
 label_nazwisko.grid(row=2, column=0, sticky=W)
-label_liczba_postow = Label(ramka_formularz, text="Liczba postów")
-label_liczba_postow.grid(row=3, column=0,sticky=W)
 label_lokalizacja = Label(ramka_formularz, text="Lokalizacja")
 label_lokalizacja.grid(row=4, column=0,sticky=W)
 
@@ -210,8 +318,6 @@ entry_imie=Entry(ramka_formularz)
 entry_imie.grid(row=1, column=1)
 entry_nazwisko=Entry(ramka_formularz)
 entry_nazwisko.grid(row=2, column=1)
-entry_liczba_postow=Entry(ramka_formularz)
-entry_liczba_postow.grid(row=3, column=1)
 entry_lokalizacja=Entry(ramka_formularz)
 entry_lokalizacja.grid(row=4, column=1)
 
@@ -230,8 +336,6 @@ label_imie_szczegoly_obiektu = Label(ramka_szczegoly_obiektu, text="Imie")
 label_imie_szczegoly_obiektu_wartosc = Label(ramka_szczegoly_obiektu, text="Wartosc")
 label_nazwisko_szczegoly_obiektu = Label(ramka_szczegoly_obiektu, text="Nazwisko")
 label_nazwisko_szczegoly_obiektu_wartosc =  Label(ramka_szczegoly_obiektu, text="Wartosc")
-label_liczba_postow_obiektu = Label(ramka_szczegoly_obiektu, text="Liczba Postów")
-label_liczba_postow_obiektu_wartosc = Label(ramka_szczegoly_obiektu, text="Wartosc")
 label_lokalizacja_obiektu = Label(ramka_szczegoly_obiektu,text="Lokalizacja")
 label_lokalizacja_obiektu_wartosc = Label(ramka_szczegoly_obiektu,text="Wartosc")
 
@@ -240,18 +344,12 @@ label_imie_szczegoly_obiektu.grid(row=1, column=0)
 label_imie_szczegoly_obiektu_wartosc.grid(row=1, column=1)
 label_nazwisko_szczegoly_obiektu.grid(row=1, column=2)
 label_nazwisko_szczegoly_obiektu_wartosc.grid(row=1, column=3)
-label_liczba_postow_obiektu.grid(row=1, column=4)
-label_liczba_postow_obiektu_wartosc.grid(row=1, column=5)
 label_lokalizacja_obiektu.grid(row=1, column=6)
-label_liczba_postow_obiektu_wartosc.grid(row=1, column=7)
 
 # Ramka dla mapy
 map_widget = tkintermapview.TkinterMapView(ramka_mapa,width=900,  height=480, corner_radius=4)
 map_widget.set_zoom(6)
 map_widget.set_position(52.2,21.0)
 map_widget.grid(row=0, column=0)
-
-
-wczytaj_uzytkownikow()
 
 root.mainloop()
